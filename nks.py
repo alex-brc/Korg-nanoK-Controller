@@ -1,4 +1,5 @@
 from __future__ import absolute_import, print_function, unicode_literals
+from sre_constants import RANGE
 from _Framework.ButtonMatrixElement import ButtonMatrixElement
 from _Framework.ControlSurface import ControlSurface
 from _Framework.InputControlElement import MIDI_CC_TYPE
@@ -68,11 +69,11 @@ class NKS(ControlSurface):
     def _create_controls(self):
         # Create Transport buttons
         self._play_button = Factory.make_button('Play_Button', TRANSPORT_PLAY)
-        self._stop_button = Factory.make_button('Stop_Button', TRANSPORT_STOP)
+        self._stop_button = Factory.make_toggle('Stop_Button', TRANSPORT_STOP)
         self._record_button = Factory.make_button('Record_Button', TRANSPORT_RECORD)
+        self._cycle_button = Factory.make_button('Cycle_Button', CYCLE)
         self._fwd_button = Factory.make_button('Forward_Button', TRANSPORT_FORWARD)
         self._rwd_button = Factory.make_button('Rewind_Button', TRANSPORT_REWIND)
-        self._mode_toggle = Factory.make_toggle('Mode_Toggle', MARKER_SET)
 
         # Create Mixer controls
         self._faders = Factory.make_matrix('Fader', Factory.make_slider, [FADERS])
@@ -82,13 +83,16 @@ class NKS(ControlSurface):
         self._grid_buttons = Factory.make_matrix('Grid_Button', Factory.make_button, MATRIX_BUTTONS)
 
         # Create Session buttons
+        self._marker_set = Factory.make_button('Mode_Toggle', MARKER_SET)
+
+        # Create Jogger controls
+        # 
+
+        # Other
         self._track_left = Factory.make_button('Track_Left', TRACK_LEFT)
         self._track_right = Factory.make_button('Track_Right', TRACK_RIGHT)
         self._marker_left = Factory.make_button('Marker_Left', MARKER_LEFT)
         self._marker_right = Factory.make_button('Marker_Right', MARKER_RIGHT)
-
-        # Create Jogger controls
-        # 
         
     def _setup_transport_component(self):
         # Build the transport components
@@ -99,10 +103,14 @@ class NKS(ControlSurface):
                 play_button=self._play_button,
                 stop_button=self._stop_button,
                 record_button=self._record_button,
+                loop_button=self._cycle_button,
                 seek_forward_button=self._fwd_button,
                 seek_backward_button=self._rwd_button
             )
         )
+
+        self._cycle_button.add_value_listener(self.test_callback, identify_sender=True)
+
         transport.set_enabled(True)
         self._transport = transport
     
@@ -113,10 +121,6 @@ class NKS(ControlSurface):
             auto_name=True,
             is_enabled=False,
             layer=Layer(
-                # mute_buttons=ButtonMatrixElement([self._mixer_buttons[0]]),
-                # solo_buttons=ButtonMatrixElement([self._mixer_buttons[1]]),
-                # arm_buttons=ButtonMatrixElement([self._mixer_buttons[2]]),
-                # track_select_buttons=ButtonMatrixElement([self._mixer_buttons[3]]),
                 volume_controls=ButtonMatrixElement(self._faders),
                 send_controls=ButtonMatrixElement(self._knobs)
             )
@@ -130,16 +134,13 @@ class NKS(ControlSurface):
             num_tracks=8,
             num_scenes=4,
             auto_name=True,
-            is_enabled=False,
-            layer=Layer(
-                # clip_launch_buttons=ButtonMatrixElement(self._launch_buttons), 
-                scene_bank_up_button=self._marker_left, 
-                scene_bank_down_button=self._marker_right
-            )
+            is_enabled=False
         )
         session.set_show_highlight(True)
         session.set_offsets(0,0)
         self.set_highlighting_session_component(session)
+
+        # Scene button on controller moves session bank
 
         session.set_enabled(True)
         self._session = session
@@ -147,7 +148,7 @@ class NKS(ControlSurface):
     def _setup_component_modes(self):
         # Setup modes with selector
         grid_modes = ModesComponent(name=u'Grid Modes', is_enabled=False)
-        grid_modes.set_toggle_button(self._mode_toggle)
+        grid_modes.set_toggle_button(self._marker_set)
 
         # Setup Mixer mode
         grid_modes.add_mode(u'mixer', 
@@ -174,30 +175,24 @@ class NKS(ControlSurface):
     def handle_sysex(self, midi_bytes):
         sysex = SysexMessage(bytes=midi_bytes)
 
-        # LEDs go dark after Scene button is pressed, redraw 
+        # Received when Scene button is pressed on controller
         if sysex.code == SysexMessage.SCENE_CHANGE_EVT:
-            # If Scene is changed to something outside usable range, go back to first scene
-            if sysex.value > 1:
-                self.log_message('Scene change attempted; resetting scene to 0; args: ' + str(midi_bytes))
-                # Mystery command also supposed to be here? Not sure why
-                # self._send_midi(SysexMessage(SysexMessage.UNKNOWN_1_CMD, 0).bytes)
-                # Set Scene to 0
-                self._send_midi(SysexMessage(SysexMessage.SCENE_CHANGE_CMD, 0).bytes)
-            # Else, Scene is accepted and a refresh is needed
-            else:
-                self.log_message('Acceptable scene change; args: ' + str(midi_bytes))
-                self.update()
-        # After setting the Scene on device, an ACK is returned, a refresh is also needed
-        elif sysex.code == SysexMessage.ACK:
-            self.log_message('Received ACK; args: ' + str(midi_bytes))
+            self._session.set_offsets_from_scene(sysex.value)
+            # LEDs go dark after Scene button is pressed, redraw 
             self.update()
+        elif sysex.code == SysexMessage.ACK:
+            self.log_message('Received ACK; args: ' + str(sysex.bytes))
+        elif sysex.code == SysexMessage.NAK:
+            self.show_message('Received NAK; args: ' + str(sysex.bytes))
         else:
             self.show_message('Received SYSEX with args: ' + str(midi_bytes))
         
         
     def handle_nonsysex(self, midi_bytes):
-        # self.show_message('Received MIDI with args: ' + str(midi_bytes))
+        self.log_message('Received MIDI with args: ' + str(midi_bytes))
 
         super(NKS, self).handle_nonsysex(midi_bytes)
 
+    def test_callback(self, value, sender):
+        self.show_message('Callback Test with value ' + str(value))
         
