@@ -8,8 +8,10 @@ from _Framework.ModesComponent import AddLayerMode, ModesComponent
 from _Framework.Resource import SharedResource
 from _Framework.TransportComponent import TransportComponent
 from _Framework.MixerComponent import MixerComponent
+from _Framework.Util import nop
 from .component import SessionComponent
 from .factory import Factory
+from .sysex import SysexMessage
 
 # Constants
 NUM_TRACKS = 8
@@ -167,5 +169,35 @@ class NKS(ControlSurface):
             toggle_value=True)
         
         grid_modes.selected_mode = u'mixer'
-        grid_modes.set_enabled(True)        
+        grid_modes.set_enabled(True)  
+    
+    def handle_sysex(self, midi_bytes):
+        sysex = SysexMessage(bytes=midi_bytes)
+
+        # LEDs go dark after Scene button is pressed, redraw 
+        if sysex.code == SysexMessage.SCENE_CHANGE_EVT:
+            # If Scene is changed to something outside usable range, go back to first scene
+            if sysex.value > 1:
+                self.log_message('Scene change attempted; resetting scene to 0; args: ' + str(midi_bytes))
+                # Mystery command also supposed to be here? Not sure why
+                # self._send_midi(SysexMessage(SysexMessage.UNKNOWN_1_CMD, 0).bytes)
+                # Set Scene to 0
+                self._send_midi(SysexMessage(SysexMessage.SCENE_CHANGE_CMD, 0).bytes)
+            # Else, Scene is accepted and a refresh is needed
+            else:
+                self.log_message('Acceptable scene change; args: ' + str(midi_bytes))
+                self.update()
+        # After setting the Scene on device, an ACK is returned, a refresh is also needed
+        elif sysex.code == SysexMessage.ACK:
+            self.log_message('Received ACK; args: ' + str(midi_bytes))
+            self.update()
+        else:
+            self.show_message('Received SYSEX with args: ' + str(midi_bytes))
+        
+        
+    def handle_nonsysex(self, midi_bytes):
+        # self.show_message('Received MIDI with args: ' + str(midi_bytes))
+
+        super(NKS, self).handle_nonsysex(midi_bytes)
+
         
