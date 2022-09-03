@@ -1,6 +1,6 @@
 #Embedded file name: /Users/versonator/Jenkins/live/output/Live/mac_64_static/Release/python-bundle/MIDI Remote Scripts/Alesis_VI/__init__.py
 from __future__ import absolute_import, print_function, unicode_literals
-from .nks import NKS
+from .NKS import NKS
 from _Framework.Capabilities import controller_id, inport, outport, CONTROLLER_ID_KEY, PORTS_KEY, NOTES_CC, SCRIPT, REMOTE
 
 def get_capabilities():

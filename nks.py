@@ -1,52 +1,14 @@
 from __future__ import absolute_import, print_function, unicode_literals
-from sre_constants import RANGE
 from _Framework.ButtonMatrixElement import ButtonMatrixElement
 from _Framework.ControlSurface import ControlSurface
-from _Framework.InputControlElement import MIDI_CC_TYPE
-from _Framework.ButtonElement import ButtonElement
 from _Framework.Layer import Layer
 from _Framework.ModesComponent import AddLayerMode, ModesComponent
-from _Framework.Resource import SharedResource
 from _Framework.TransportComponent import TransportComponent
 from _Framework.MixerComponent import MixerComponent
-from _Framework.Util import nop
-from .component import SessionComponent
-from .factory import Factory
-from .sysex import SysexMessage
-
-# Constants
-NUM_TRACKS = 8
-
-# Track controls
-FADERS = [2, 3, 4, 5, 6, 8, 9, 12]
-KNOBS = [13, 14, 15, 16, 17, 18, 19, 20]
-MATRIX_BUTTONS = [
-    [21, 22, 23, 24, 25, 26, 27, 28], # Mute
-    [29, 30, 31, 33, 34, 35, 36, 37], # Solo
-    [38, 39, 40, 41, 42, 43, 44, 45], # Rec
-    [46, 47, 48, 49, 50, 51, 52, 53]] # Select
-
-# Jog Wheel
-JOG_SIGN_MAGNITUTE = 82
-JOG_CLOCKWISE = 83
-JOG_INCREMENT = 83
-JOG_C_CLOCKWISE = 85
-JOG_DECREMENT = 85
-JOG_CONTINUOUS = 86
-
-# Transport controls
-CYCLE = 54
-MARKER_SET = 55
-MARKER_LEFT = 56
-MARKER_RIGHT = 57
-TRANSPORT_REWIND = 58
-TRANSPORT_FORWARD = 59
-TRACK_LEFT = 60
-TRACK_RIGHT = 61
-TRANSPORT_RETURN_TO_ZERO = 62
-TRANSPORT_STOP = 63
-TRANSPORT_PLAY = 80
-TRANSPORT_RECORD = 81
+from .Component import SessionComponent
+from .Sysex import SysexMessage
+from .Element import ButtonElement, SliderElement, Factory
+from .Device import Device
 
 class NKS(ControlSurface):
 
@@ -68,31 +30,31 @@ class NKS(ControlSurface):
     
     def _create_controls(self):
         # Create Transport buttons
-        self._play_button = Factory.make_button('Play_Button', TRANSPORT_PLAY)
-        self._stop_button = Factory.make_toggle('Stop_Button', TRANSPORT_STOP)
-        self._record_button = Factory.make_button('Record_Button', TRANSPORT_RECORD)
-        self._cycle_button = Factory.make_button('Cycle_Button', CYCLE)
-        self._fwd_button = Factory.make_button('Forward_Button', TRANSPORT_FORWARD)
-        self._rwd_button = Factory.make_button('Rewind_Button', TRANSPORT_REWIND)
+        self._play_button = ButtonElement('Play_Button', Device.Transport.Play)
+        self._stop_button = ButtonElement('Stop_Button', Device.Transport.Stop)
+        self._record_button = ButtonElement('Record_Button', Device.Transport.Record)
+        self._cycle_button = ButtonElement('Cycle_Button', Device.Transport.Cycle)
+        self._fwd_button = ButtonElement('Forward_Button', Device.Transport.Forward)
+        self._rwd_button = ButtonElement('Rewind_Button', Device.Transport.Rewind)
 
         # Create Mixer controls
-        self._faders = Factory.make_matrix('Fader', Factory.make_slider, [FADERS])
-        self._knobs = Factory.make_matrix('Knob', Factory.make_encoder, [KNOBS])
+        self._faders = Factory.create_matrix(SliderElement, 'Fader', [Device.Track.Fader])
+        self._knobs = Factory.create_matrix(SliderElement, 'Knob', [Device.Track.Knob])
 
         # Create the button grid and shift wrapper
-        self._grid_buttons = Factory.make_matrix('Grid_Button', Factory.make_button, MATRIX_BUTTONS)
+        self._grid_buttons = Factory.create_matrix(ButtonElement, 'Grid_Button', Device.Track.Buttons)
 
         # Create Session buttons
-        self._marker_set = Factory.make_button('Mode_Toggle', MARKER_SET)
+        self._marker_set = ButtonElement('Mode_Toggle', Device.Marker.Set)
 
         # Create Jogger controls
         # 
 
         # Other
-        self._track_left = Factory.make_button('Track_Left', TRACK_LEFT)
-        self._track_right = Factory.make_button('Track_Right', TRACK_RIGHT)
-        self._marker_left = Factory.make_button('Marker_Left', MARKER_LEFT)
-        self._marker_right = Factory.make_button('Marker_Right', MARKER_RIGHT)
+        self._track_left = ButtonElement('Track_Left', Device.Track.Left)
+        self._track_right = ButtonElement('Track_Right', Device.Track.Right)
+        self._marker_left = ButtonElement('Marker_Left', Device.Marker.Left)
+        self._marker_right = ButtonElement('Marker_Right', Device.Marker.Right)
         
     def _setup_transport_component(self):
         # Build the transport components
@@ -108,8 +70,6 @@ class NKS(ControlSurface):
                 seek_backward_button=self._rwd_button
             )
         )
-
-        self._cycle_button.add_value_listener(self.test_callback, identify_sender=True)
 
         transport.set_enabled(True)
         self._transport = transport
@@ -192,7 +152,4 @@ class NKS(ControlSurface):
         self.log_message('Received MIDI with args: ' + str(midi_bytes))
 
         super(NKS, self).handle_nonsysex(midi_bytes)
-
-    def test_callback(self, value, sender):
-        self.show_message('Callback Test with value ' + str(value))
         
