@@ -7,7 +7,7 @@ from _Framework.TransportComponent import TransportComponent
 from _Framework.MixerComponent import MixerComponent
 from .Component import SessionComponent
 from .Sysex import SysexMessage
-from .Element import ButtonElement, SliderElement, Factory
+from .Element import ButtonElement, SliderElement, Factory, StopButtonElement, SessionButtonElement
 from .Device import Device
 
 class NKS(ControlSurface):
@@ -29,11 +29,13 @@ class NKS(ControlSurface):
             self._setup_component_modes()
     
     def _create_controls(self):
+        # Creat shift button
+        self._shift_button = ButtonElement('Shift_Button', Device.Transport.Cycle)
+
         # Create Transport buttons
         self._play_button = ButtonElement('Play_Button', Device.Transport.Play)
-        self._stop_button = ButtonElement('Stop_Button', Device.Transport.Stop)
+        self._stop_button = StopButtonElement('Stop_Button', Device.Transport.Stop)
         self._record_button = ButtonElement('Record_Button', Device.Transport.Record)
-        self._cycle_button = ButtonElement('Cycle_Button', Device.Transport.Cycle)
         self._fwd_button = ButtonElement('Forward_Button', Device.Transport.Forward)
         self._rwd_button = ButtonElement('Rewind_Button', Device.Transport.Rewind)
 
@@ -42,10 +44,14 @@ class NKS(ControlSurface):
         self._knobs = Factory.create_matrix(SliderElement, 'Knob', [Device.Track.Knob])
 
         # Create the button grid and shift wrapper
-        self._grid_buttons = Factory.create_matrix(ButtonElement, 'Grid_Button', Device.Track.Buttons)
+        self._grid_buttons = Factory.create_matrix(
+            SessionButtonElement, 
+            'Grid_Button', 
+            Device.Track.Buttons)
 
         # Create Session buttons
-        self._marker_set = ButtonElement('Mode_Toggle', Device.Marker.Set)
+        self._session_toggle = ButtonElement('Session_Toggle', Device.Marker.Set)
+        self._stop_clips_button = ButtonElement('Stop_Clips_Button', Device.Transport.Previous)
 
         # Create Jogger controls
         # 
@@ -65,11 +71,12 @@ class NKS(ControlSurface):
                 play_button=self._play_button,
                 stop_button=self._stop_button,
                 record_button=self._record_button,
-                loop_button=self._cycle_button,
                 seek_forward_button=self._fwd_button,
                 seek_backward_button=self._rwd_button
             )
         )
+        # Stop button is reactive to the Transport state
+        self._stop_button.set_transport(transport)
 
         transport.set_enabled(True)
         self._transport = transport
@@ -94,21 +101,25 @@ class NKS(ControlSurface):
             num_tracks=8,
             num_scenes=4,
             auto_name=True,
-            is_enabled=False
+            enable_skinning=True,
+            is_enabled=False,
+            layer=Layer(
+                stop_all_clips_button=self._stop_clips_button
+            )
+            # Scene button on controller moves session bank
         )
         session.set_show_highlight(True)
-        session.set_offsets(0,0)
         self.set_highlighting_session_component(session)
 
-        # Scene button on controller moves session bank
+        ## self._session_toggle.add_value_listener(_reset_grid_colors, identify_sender=False)
 
         session.set_enabled(True)
         self._session = session
 
     def _setup_component_modes(self):
         # Setup modes with selector
-        grid_modes = ModesComponent(name=u'Grid Modes', is_enabled=False)
-        grid_modes.set_toggle_button(self._marker_set)
+        grid_modes = ModesComponent(name=u'Grid_Modes', is_enabled=False)
+        grid_modes.set_toggle_button(self._session_toggle)
 
         # Setup Mixer mode
         grid_modes.add_mode(u'mixer', 
@@ -146,10 +157,4 @@ class NKS(ControlSurface):
             self.show_message('Received NAK; args: ' + str(sysex.bytes))
         else:
             self.show_message('Received SYSEX with args: ' + str(midi_bytes))
-        
-        
-    def handle_nonsysex(self, midi_bytes):
-        self.log_message('Received MIDI with args: ' + str(midi_bytes))
-
-        super(NKS, self).handle_nonsysex(midi_bytes)
         
