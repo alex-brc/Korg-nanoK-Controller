@@ -33,6 +33,10 @@ class Factory:
         return ButtonElement(True, MIDI_CC_TYPE, 0, cc, name=name, skin=Factory.DEFAULT_BUTTON_SKIN, *a, **k)
 
     @staticmethod
+    def make_toggle(name, cc, *a, **k):
+        return ButtonElement(False, MIDI_CC_TYPE, 0, cc, name=name, skin=Factory.DEFAULT_BUTTON_SKIN, *a, **k)
+
+    @staticmethod
     def make_slider(name, cc, *a, **k):
         return SliderElement(MIDI_CC_TYPE, 0, cc, name=name, *a, **k)
 
