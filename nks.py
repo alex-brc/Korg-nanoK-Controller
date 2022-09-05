@@ -3,12 +3,11 @@ from _Framework.ButtonMatrixElement import ButtonMatrixElement
 from _Framework.ControlSurface import ControlSurface
 from _Framework.Layer import Layer
 from _Framework.ModesComponent import AddLayerMode, ModesComponent
-from _Framework.TransportComponent import TransportComponent
 from _Framework.MixerComponent import MixerComponent
-from .Component import SessionComponent
-from .Sysex import SysexMessage
-from .Element import ButtonElement, SliderElement, Factory, StopButtonElement, SessionButtonElement
+from .Component import SelectableModesComponent, SessionComponent, TransportComponent
+from .Sysex import Sysex
 from .Device import Device
+from .Element import ButtonElement, SliderElement, Factory, AnimatedButtonElement, SysexButtonElement
 
 class NKS(ControlSurface):
 
@@ -27,14 +26,17 @@ class NKS(ControlSurface):
 
             # Create modes for the button grid
             self._setup_component_modes()
-    
+            
+
     def _create_controls(self):
-        # Creat shift button
-        self._shift_button = ButtonElement('Shift_Button', Device.Transport.Cycle)
+        # Creat Scene button
+        def __unpack_bytes(value): return value[0]
+        self._scene_selector = SysexButtonElement('Scene_Selector', 
+            Sysex.Code.SCENE_CHANGE_EVT, Sysex.Code.SCENE_CHANGE_CMD, translate_value=__unpack_bytes)
 
         # Create Transport buttons
         self._play_button = ButtonElement('Play_Button', Device.Transport.Play)
-        self._stop_button = StopButtonElement('Stop_Button', Device.Transport.Stop)
+        self._stop_button = ButtonElement('Stop_Button', Device.Transport.Stop)
         self._record_button = ButtonElement('Record_Button', Device.Transport.Record)
         self._fwd_button = ButtonElement('Forward_Button', Device.Transport.Forward)
         self._rwd_button = ButtonElement('Rewind_Button', Device.Transport.Rewind)
@@ -44,23 +46,23 @@ class NKS(ControlSurface):
         self._knobs = Factory.create_matrix(SliderElement, 'Knob', [Device.Track.Knob])
 
         # Create the button grid and shift wrapper
-        self._grid_buttons = Factory.create_matrix(
-            SessionButtonElement, 
-            'Grid_Button', 
-            Device.Track.Buttons)
+        self._grid_buttons = Factory.create_matrix(AnimatedButtonElement, 'Grid_Button', Device.Track.Buttons)
 
         # Create Session buttons
         self._session_toggle = ButtonElement('Session_Toggle', Device.Marker.Set)
         self._stop_clips_button = ButtonElement('Stop_Clips_Button', Device.Transport.Previous)
 
         # Create Jogger controls
-        # 
+        self._jog_wheel = SliderElement('Jog_Wheel', Device.JogWheel.Continous)
 
         # Other
+        self._shift_button = ButtonElement('Shift_Button', Device.Transport.Cycle)
+        
         self._track_left = ButtonElement('Track_Left', Device.Track.Left)
         self._track_right = ButtonElement('Track_Right', Device.Track.Right)
         self._marker_left = ButtonElement('Marker_Left', Device.Marker.Left)
         self._marker_right = ButtonElement('Marker_Right', Device.Marker.Right)
+
         
     def _setup_transport_component(self):
         # Build the transport components
@@ -75,8 +77,6 @@ class NKS(ControlSurface):
                 seek_backward_button=self._rwd_button
             )
         )
-        # Stop button is reactive to the Transport state
-        self._stop_button.set_transport(transport)
 
         transport.set_enabled(True)
         self._transport = transport
@@ -111,18 +111,20 @@ class NKS(ControlSurface):
         session.set_show_highlight(True)
         self.set_highlighting_session_component(session)
 
-        ## self._session_toggle.add_value_listener(_reset_grid_colors, identify_sender=False)
-
         session.set_enabled(True)
         self._session = session
 
     def _setup_component_modes(self):
-        # Setup modes with selector
-        grid_modes = ModesComponent(name=u'Grid_Modes', is_enabled=False)
-        grid_modes.set_toggle_button(self._session_toggle)
+        # Setup scene modes with selector
+        def __redraw_scene(*a): self.update()
+        scene_modes = SelectableModesComponent(
+            name=u'Scene_Modes', 
+            selector=self._scene_selector,
+            on_mode_selected=__redraw_scene,
+            is_enabled=False)
 
         # Setup Mixer mode
-        grid_modes.add_mode(u'mixer', 
+        scene_modes.add_mode('Mixer_Mode', 
             AddLayerMode(
                 self._mixer, 
                 layer=Layer(
@@ -130,31 +132,16 @@ class NKS(ControlSurface):
                     solo_buttons=ButtonMatrixElement([self._grid_buttons[1]]),
                     arm_buttons=ButtonMatrixElement([self._grid_buttons[2]]),
                     track_select_buttons=ButtonMatrixElement([self._grid_buttons[3]]))),
-            toggle_value=False)
+            selector_value=Device.Scene.Mixer)
         
         # Setup Session mode
-        grid_modes.add_mode(u'session', 
+        scene_modes.add_mode(u'Session_Mode', 
             AddLayerMode(
                 self._session, 
                 layer=Layer(
                     clip_launch_buttons=ButtonMatrixElement(self._grid_buttons))),
-            toggle_value=True)
+            selector_value=Device.Scene.Session)
         
-        grid_modes.selected_mode = u'mixer'
-        grid_modes.set_enabled(True)  
+        scene_modes.selected_mode = u'Mixer_Mode'
+        scene_modes.set_enabled(True)  
     
-    def handle_sysex(self, midi_bytes):
-        sysex = SysexMessage(bytes=midi_bytes)
-
-        # Received when Scene button is pressed on controller
-        if sysex.code == SysexMessage.SCENE_CHANGE_EVT:
-            self._session.set_offsets_from_scene(sysex.value)
-            # LEDs go dark after Scene button is pressed, redraw 
-            self.update()
-        elif sysex.code == SysexMessage.ACK:
-            self.log_message('Received ACK; args: ' + str(sysex.bytes))
-        elif sysex.code == SysexMessage.NAK:
-            self.show_message('Received NAK; args: ' + str(sysex.bytes))
-        else:
-            self.show_message('Received SYSEX with args: ' + str(midi_bytes))
-        

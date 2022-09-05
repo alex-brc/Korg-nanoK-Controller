@@ -1,4 +1,12 @@
 class Device:
+
+    class Scene:
+        Count = 3
+        
+        Mixer = 0
+        Session = 1
+        Device = 2
+
     class Track:
         Count = 8
 
@@ -31,7 +39,7 @@ class Device:
         Left = 56
         Right = 57
     
-    class Jogger:
+    class JogWheel:
         Sign_Magnitude = 82
 
         Increment = Clockwise = 83
